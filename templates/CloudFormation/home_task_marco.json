@@ -1,0 +1,477 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Marco Martinez Home Task",
+    "Resources": {
+        "NetworkVPC": {
+            "Type": "AWS::EC2::VPC",
+            "Properties": {
+                "CidrBlock": {"Ref": "VPCCidrBlock"},
+                "EnableDnsSupport": true,
+                "EnableDnsHostnames": true,
+                "InstanceTenancy": "default"
+            }
+        },
+        "NetworkSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "NetworkVPC"
+                },
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        0,
+                        {
+                            "Fn::GetAZs": ""
+                        }
+                    ]
+                },
+                "CidrBlock": {"Ref": "Subnet1CidrBlock"},
+                "MapPublicIpOnLaunch": true
+            }
+        },
+        "NetworkSubnet2": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "NetworkVPC"
+                },
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        1,
+                        {
+                            "Fn::GetAZs": ""
+                        }
+                    ]
+                },
+                "CidrBlock": {"Ref": "Subnet2CidrBlock"},
+                "MapPublicIpOnLaunch": true
+            }
+        },
+        "NetworkInternetGateway": {
+            "Type": "AWS::EC2::InternetGateway"
+        },
+        "NetworkVPCGatewayAttachment": {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties": {
+                "InternetGatewayId": {
+                    "Ref": "NetworkInternetGateway"
+                },
+                "VpcId": {
+                    "Ref": "NetworkVPC"
+                }
+            }
+        },
+        "NetworkRouteTable": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "NetworkVPC"
+                }
+            }
+        },
+        "NetworkRouteTableAssociation1": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "NetworkSubnet1"
+                },
+                "RouteTableId": {
+                    "Ref": "NetworkRouteTable"
+                }
+            }
+        },
+        "NetworkRouteTableAssociation2": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "NetworkSubnet2"
+                },
+                "RouteTableId": {
+                    "Ref": "NetworkRouteTable"
+                }
+            }
+        },
+        "NetworkRoute": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "NetworkVPCGatewayAttachment",
+            "Properties": {
+                "GatewayId": {
+                    "Ref": "NetworkInternetGateway"
+                },
+                "RouteTableId": {
+                    "Ref": "NetworkRouteTable"
+                },
+                "DestinationCidrBlock": {"Ref": "RouteTableCidrBlock"}
+            }
+        },
+        "IAMExecutionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ecs-tasks.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "AmazonECSTaskExecutionRolePolicy",
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "ecr:GetAuthorizationToken",
+                                        "ecr:BatchCheckLayerAvailability",
+                                        "ecr:GetDownloadUrlForLayer",
+                                        "ecr:BatchGetImage",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "LoadBalancerSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Security group for loadbalancer to services on ECS",
+                "VpcId": {
+                    "Ref": "NetworkVPC"
+                },
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": {"Ref": "SecurityIngress"},
+                        "IpProtocol": -1
+                    }
+                ]
+            }
+        },
+        "EC2SecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "NetworkVPC"
+                },
+                "GroupDescription": "EC2 Security Group",
+                "SecurityGroupIngress": [
+                    {
+                        "SourceSecurityGroupId": {
+                            "Ref": "LoadBalancerSecurityGroup"
+                        },
+                        "IpProtocol": -1
+                    }
+                ]
+            }
+        },
+        "LogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+                "LogGroupName": { "Ref": "LogsGroup" },
+                "RetentionInDays": 1
+            }
+        },
+
+        "ECSCluster": {
+            "Type": "AWS::ECS::Cluster",
+            "Properties": {
+                "ClusterName": { "Ref": "ServiceName" }
+            }
+        },
+        "ELBLoadBalancer": {
+            "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+            "Properties": {
+                "Name": "ecs-services",
+                "Subnets": [
+                    {
+                        "Ref": "NetworkSubnet1"
+                    },
+                    {
+                        "Ref": "NetworkSubnet2"
+                    }
+                ],
+                "SecurityGroups": [
+                    {
+                        "Ref": "LoadBalancerSecurityGroup"
+                    }
+                ]
+            }
+        },
+        "ELBTargetGroup": {
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+            "Properties": {
+                "Name": "TargetGroup",
+                "VpcId": {
+                    "Ref": "NetworkVPC"
+                },
+                "Protocol": "HTTP",
+                "Port": "80"
+            }
+        },
+        "ELBListener": {
+            "Type": "AWS::ElasticLoadBalancingV2::Listener",
+            "Properties": {
+                "LoadBalancerArn": {
+                    "Ref": "ELBLoadBalancer"
+                },
+                "Protocol": "HTTP",
+                "Port": {"Ref": "ContainerPort"},
+                "DefaultActions": [
+                    {
+                        "Type": "forward",
+                        "TargetGroupArn": {
+                            "Ref": "ELBTargetGroup"
+                        }
+                    }
+                ]
+            }
+        },
+        "ECSTaskDefinition": {
+            "Type": "AWS::ECS::TaskDefinition",
+            "Properties": {
+                "Family": { "Ref": "LogsGroup" },
+                "Cpu": {"Ref": "ContainerCPU"},
+                "Memory": {"Ref": "ContainerMemory"},
+                "NetworkMode": "awsvpc",
+                "RequiresCompatibilities": [
+                    "FARGATE"
+                ],
+                "ExecutionRoleArn": {
+                    "Ref": "IAMExecutionRole"
+                },
+                "ContainerDefinitions": [
+                    {
+                        "Name":  { "Ref": "ContainerName" },
+                        "Image": {
+                            "Ref": "ContainerImage"
+                        },
+                        "Cpu": {"Ref": "ContainerCPU"},
+                        "Memory": {"Ref": "ContainerMemory"},
+                        "PortMappings": [
+                            {
+                                "ContainerPort": {"Ref": "ContainerPort"},
+                                "Protocol": "tcp"
+                            }
+                        ],
+                        "LogConfiguration": {
+                            "LogDriver": "awslogs",
+                            "Options": {
+                                "awslogs-group":  { "Ref": "LogsGroup" },
+                                "awslogs-region": {
+                                    "Ref": "AWS::Region"
+                                },
+                                "awslogs-stream-prefix":  { "Ref": "ServiceName" }
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        "TargetGroup": {
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+            "Properties": {
+                "Name":  { "Ref": "ServiceName" },
+                "VpcId": {
+                    "Ref": "NetworkVPC"
+                },
+                "Port": {"Ref": "ContainerPort"},
+                "Protocol": "HTTP",
+                "Matcher": {
+                    "HttpCode": "200-299"
+                },
+                "HealthCheckIntervalSeconds": 10,
+                "HealthCheckPath": "/_health",
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckTimeoutSeconds": 5,
+                "HealthyThresholdCount": 10,
+                "TargetType": "ip"
+            }
+        },
+        "ListenerRule": {
+            "Type": "AWS::ElasticLoadBalancingV2::ListenerRule",
+            "Properties": {
+                "ListenerArn": {
+                    "Ref": "ELBListener"
+                },
+                "Priority": 1,
+                "Conditions": [
+                    {
+                        "Field": "path-pattern",
+                        "Values": [
+                            "/*"
+                        ]
+                    }
+                ],
+                "Actions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "TargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ]
+            }
+        },
+        "Service": {
+            "Type": "AWS::ECS::Service",
+            "DependsOn": "ListenerRule",
+            "Properties": {
+                "ServiceName":  { "Ref": "ServiceName" },
+                "TaskDefinition": {
+                    "Ref": "ECSTaskDefinition"
+                },
+                "Cluster": {
+                    "Ref": "ECSCluster"
+                },
+                "LaunchType": "FARGATE",
+                "DesiredCount": {"Ref": "ClusterTasks"},
+                "DeploymentConfiguration": {
+                    "MaximumPercent": {"Ref": "ClusterMaximumPercent"},
+                    "MinimumHealthyPercent": {"Ref": "ClusterMinimumHealthyPercent"}
+                },
+                "NetworkConfiguration": {
+                    "AwsvpcConfiguration": {
+                        "AssignPublicIp": "ENABLED",
+                        "Subnets": [
+                            {
+                                "Ref": "NetworkSubnet1"
+                            },
+                            {
+                                "Ref": "NetworkSubnet2"
+                            }
+                        ],
+                        "SecurityGroups": [
+                            {
+                                "Ref": "EC2SecurityGroup"
+                            }
+                        ]
+                    }
+                },
+                "LoadBalancers": [
+                    {
+                        "ContainerName":  {"Ref": "ContainerName" },
+                        "ContainerPort": {"Ref": "ContainerPort"},
+                        "TargetGroupArn": {
+                            "Ref": "TargetGroup"
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    "Parameters": {
+        "ContainerImage": {
+            "Description": "Container Image",
+            "Type": "String",
+            "Default": "097268227507.dkr.ecr.us-east-1.amazonaws.com/marco-task:v1"
+        },
+        "ContainerName": {
+            "Description": "Container Name",
+            "Type": "String",
+            "Default": "marcotask"
+        },
+        "ServiceName": {
+            "Description": "Service Name",
+            "Type": "String",
+            "Default": "masrcotask-service"
+        },
+        "LogsGroup": {
+            "Description": "Logs Group Name",
+            "Type": "String",
+            "Default": "wizeline"
+        },
+        "VPCCidrBlock": {
+            "Description": "VPC Cidr Block",
+            "Type": "String",
+            "Default": "10.0.0.0/16"
+        },
+        "Subnet1CidrBlock": {
+            "Description": "Subnet1 Cidr Block",
+            "Type": "String",
+            "Default": "10.0.0.0/20"
+        },
+        "Subnet2CidrBlock": {
+            "Description": "Subnet2 Cidr Block",
+            "Type": "String",
+            "Default": "10.0.32.0/20"
+        },
+        "RouteTableCidrBlock": {
+            "Description": "Route Table CidrBlock ",
+            "Type": "String",
+            "Default": "0.0.0.0/0"
+        },
+        "SecurityIngress": {
+            "Description": "Security Ingress",
+            "Type": "String",
+            "Default": "0.0.0.0/0"
+        },
+        "ContainerPort": {
+            "Description": "Container Port",
+            "Type": "Number",
+            "Default": 8000
+        },
+        "ContainerCPU": {
+            "Description": "Container CPU Units",
+            "Type": "Number",
+            "Default": 256,
+            "AllowedValues": [256,512,1024,2048,4096]
+        },
+        "ContainerMemory": {
+            "Description": "Container Momory MiB",
+            "Type": "Number",
+            "Default": 512,
+            "AllowedValues": [512,1000,3000,4000,5000,6000,7000,8000]
+        },
+        "ClusterTasks": {
+            "Description": "The number of simultaneous tasks that you want to run on the cluster.",
+            "Type": "Number",
+            "Default": 2
+        },
+        "ClusterMaximumPercent": {
+            "Description": "The maximum number of tasks that can run in a service during a deployment.",
+            "Type": "Number",
+            "Default": 200
+        },
+        "ClusterMinimumHealthyPercent": {
+            "Description": "The minimum  number of tasks hat must continue to run and remain healthy during a deployment.",
+            "Type": "Number",
+            "Default": 70
+        }
+    },
+    "Outputs": {
+        "ApiEndpoint": {
+            "Description": "API Endpoint",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "http://",
+                        {
+                            "Fn::GetAtt": [
+                                "ELBLoadBalancer",
+                                "DNSName"
+                            ]
+                        },
+                        ":",
+                        {"Ref": "ContainerPort"},
+                        "/cidr-to-mask?value=24"
+                    ]
+                ]
+            }
+        }
+    }
+}
