@@ -71,10 +71,15 @@ git clone https://[username]:[token]@github.com/wizeline/wize-cloud-ops-marco-ma
 cd wize-cloud-ops-marco-martinez
 ```
 ## Docker Container
-### Generate Gemfile.lock
+### Generate Gemfile.lock (Lock Version Dependencies)
 ```bash
 docker run --rm -v "$PWD"/src:/src -w /src ruby:2.5 bundle install
 ```
+https://docs.docker.com/engine/reference/run/
+--rm (Clean on exit)
+-v, --volume=[host-src:]container-dest[:<options>]: Bind mount a volume.
+-w="": Working directory inside the container
+
 ### Create Dockerfile
 ```sh
 FROM ruby:2.5
@@ -97,6 +102,8 @@ EXPOSE 8000
 # Container execution command and running port
 CMD ruby api.rb -p 8000
 ```
+### docker-compose.yml File
+https://docs.docker.com/compose/rails/
 
 ### Build container
 ```bash
