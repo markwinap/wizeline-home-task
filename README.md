@@ -39,6 +39,7 @@ $ curl localhost:8000/mask-to-cidr?value=255.255.0.0
 ### API Endpoint
 ```bash
 $ curl http://ecs-services-1430616052.us-east-1.elb.amazonaws.com:8000/cidr-to-mask?value=24
+$ curl localhost:8000/cidr-to-mask?value=24
 {
   "function": "cidrToMask",
   "input": "24",
@@ -47,6 +48,7 @@ $ curl http://ecs-services-1430616052.us-east-1.elb.amazonaws.com:8000/cidr-to-m
 ```
 ```bash
 $ curl http://ecs-services-1430616052.us-east-1.elb.amazonaws.com:8000/mask-to-cidr?value=255.255.0.0
+$ curl localhost:8000/mask-to-cidr?value=255.255.0.0
 {
   "function": "maskToCidr",
   "input": "255.255.0.0",
@@ -64,6 +66,7 @@ $ curl http://ecs-services-1430616052.us-east-1.elb.amazonaws.com:8000/mask-to-c
 ### Clone Repo
 ```sh
 git clone https://[username]:[token]@github.com/wizeline/wize-cloud-ops-marco-martinez.git
+git clone https://[username]:[token]@github.com/markwinap/wizeline-test.git
 ```
 
 ### Go to folder
@@ -83,27 +86,21 @@ https://docs.docker.com/engine/reference/run/
 ### Create Dockerfile
 ```sh
 FROM ruby:2.5
-
-# throw errors if Gemfile has been modified since Gemfile.lock
-RUN bundle config --global frozen 1
-
+# Set working directory and copy files from local path to container file system path
+WORKDIR /src
+COPY src/ /src
+# Install Ruby ependencies by installing all the required gems (Sinatra)
+RUN bundle install
+#Labels
 LABEL author="Marco Martinez"
 LABEL email="markwinap@gmail.com"
 LABEL version="1.0"
 LABEL description="Home Task"
-
-# Set working directory and copy files from local path to container file system path
-WORKDIR src/
-COPY src/ /src
-# Install Ruby ependencies by installing all the required gems
-RUN bundle install
 # Listens to TCP port 8000
 EXPOSE 8000
-# Container execution command and running port
-CMD ruby api.rb -p 8000
+# Start the main process.
+CMD ["ruby", "api.rb", "-p", "8000"]
 ```
-### docker-compose.yml File
-https://docs.docker.com/compose/rails/
 
 ### Build container
 ```bash
@@ -112,6 +109,36 @@ sudo docker build -t marco-task .
 ### Run container locally
 ```bash
 sudo docker run -p 8000:8000 marco-task
+```
+
+# Using docker-compose
+- https://docs.docker.com/compose/reference/
+- https://docs.docker.com/compose/compose-file/
+### Create docker-compose.yml File
+```sh
+version: '3'
+services:
+  web:
+    build: .
+    working_dir: /src
+    command: bundle exec ruby api.rb -p 8000
+    volumes:
+      - $PWD/src:/src
+    ports:
+      - "8000:8000"
+```
+### Run container locally
+```bash
+docker-compose run --rm -v $PWD/src:/src -w /src --service-ports web bundle exec ruby api.rb -p 8000
+```
+
+### Run container locally (yaml)
+```bash
+docker-compose up
+```
+### Stop containers created by up
+```bash
+docker-compose down
 ```
 
 # Other usefull commands
