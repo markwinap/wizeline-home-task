@@ -71,7 +71,7 @@ git clone https://[username]:[token]@github.com/wizeline/wize-cloud-ops-marco-ma
 cd wize-cloud-ops-marco-martinez
 ```
 ## Docker Container
-### Generate Gemfile.lock (Lock Version Dependencies)
+### Run container process, Generate Gemfile.lock (Lock Version Dependencies)
 ```bash
 docker run --rm -v "$PWD"/src:/src -w /src ruby:2.5 bundle install
 ```

@@ -1,11 +1,11 @@
 FROM ruby:2.5
 RUN apt-get update -qq && apt-get install -y nodejs postgresql-client
-RUN mkdir /myapp
-WORKDIR /myapp
-COPY Gemfile /myapp/Gemfile
-COPY Gemfile.lock /myapp/Gemfile.lock
+RUN mkdir /src
+# Set working directory and copy files from local path to container file system path
+WORKDIR src/
+COPY src/ /src
+# Install Ruby ependencies by installing all the required gems
 RUN bundle install
-COPY . /myapp
 
 LABEL author="Marco Martinez"
 LABEL email="markwinap@gmail.com"
@@ -19,4 +19,4 @@ ENTRYPOINT ["entrypoint.sh"]
 EXPOSE 8000
 
 # Start the main process.
-CMD ["rails", "server", "-b", "0.0.0.0"]
+CMD ["ruby", "api.rb", "-p", "8000"]
